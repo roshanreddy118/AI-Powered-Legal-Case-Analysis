@@ -4,14 +4,6 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "devCommand": "npm run dev",
-  "env": {
-    "GEMINI_API_KEY": "@gemini_api_key",
-    "GEMINI_PROJECT_NAME": "@gemini_project_name",
-    "GEMINI_PROJECT_NUMBER": "@gemini_project_number",
-    "NEXTAUTH_SECRET": "@nextauth_secret",
-    "NEXTAUTH_URL": "@nextauth_url",
-    "DATABASE_URL": "@database_url"
-  },
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 30
