@@ -36,7 +36,7 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Removed Powered by Gemini AI text */}
+              <span className="text-sm text-white/70 px-3 py-1 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 rounded-full border border-white/10 backdrop-blur-sm">Powered by Gemini AI</span>
             </div>
           </div>
         </div>

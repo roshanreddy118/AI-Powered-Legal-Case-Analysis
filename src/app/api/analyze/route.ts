@@ -1,0 +1,201 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { legalAnalysisModel, listAvailableModels, LEGAL_PROMPTS } from '@/lib/gemini';
+import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation } from '@/types/legal';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { caseId, analysisType, additionalContext, caseData } = await request.json() as AnalysisRequest & { caseData: any };
+
+    if (!caseId || !analysisType || !caseData) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields: caseId, analysisType, and caseData'
+      }, { status: 400 });
+    }
+
+    const startTime = Date.now();
+
+    // Select appropriate prompt based on analysis type
+    let prompt = '';
+    switch (analysisType) {
+      case AnalysisType.WRONGFUL_CONVICTION:
+        prompt = LEGAL_PROMPTS.WRONGFUL_CONVICTION_ANALYSIS;
+        break;
+      case AnalysisType.PROSECUTORIAL_MISCONDUCT:
+        prompt = LEGAL_PROMPTS.PROSECUTORIAL_MISCONDUCT;
+        break;
+      case AnalysisType.CASE_SIMILARITY:
+        prompt = LEGAL_PROMPTS.CASE_SIMILARITY_ANALYSIS;
+        break;
+      case AnalysisType.BIAS_DETECTION:
+        prompt = LEGAL_PROMPTS.BIAS_DETECTION;
+        break;
+      default:
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid analysis type'
+        }, { status: 400 });
+    }
+
+    // Prepare case context for AI analysis
+    const caseContext = `
+      Case Details:
+      Case Number: ${caseData.caseNumber}
+      Court: ${caseData.court}
+      Case Type: ${caseData.caseType}
+      Status: ${caseData.status}
+      
+      Parties Involved:
+      ${caseData.parties?.map((p: any) => `${p.type}: ${p.name}`).join('\n')}
+      
+      Legal Sections:
+      ${caseData.caseDetails?.sections?.map((s: any) => `${s.act} Section ${s.section}: ${s.description}`).join('\n')}
+      
+      Evidence:
+      ${caseData.caseDetails?.evidence?.map((e: any) => `${e.type}: ${e.description} (Reliability: ${e.reliability}/5)`).join('\n')}
+      
+      Witnesses:
+      ${caseData.caseDetails?.witnesses?.map((w: any) => `${w.type}: ${w.name} (Credibility: ${w.credibility}/5)`).join('\n')}
+      
+      Case Summary:
+      ${caseData.caseDetails?.summary}
+      
+      Timeline:
+      ${caseData.timeline?.map((t: any) => `${t.date}: ${t.description}`).join('\n')}
+      
+      ${additionalContext ? `Additional Context: ${additionalContext}` : ''}
+    `;
+
+    const fullPrompt = `${prompt}\n\nCase Information:\n${caseContext}\n\nPlease provide your analysis in the following JSON format:
+    {
+      "riskScore": number (1-10),
+      "confidence": number (0-1),
+      "findings": [
+        {
+          "category": "string",
+          "severity": "Low" | "Medium" | "High" | "Critical",
+          "description": "string",
+          "evidence": ["string array"],
+          "precedents": ["string array (optional)"]
+        }
+      ],
+      "recommendations": [
+        {
+          "type": "Investigation Required" | "Legal Review" | "Policy Change" | "Training Required" | "Escalate to Higher Authority" | "No Action Required",
+          "priority": "Low" | "Medium" | "High" | "Urgent",
+          "description": "string",
+          "actionItems": ["string array"],
+          "timeline": "string (optional)"
+        }
+      ],
+      "summary": "Overall analysis summary"
+    }`;
+
+    // Get AI analysis using dynamic model selection
+    const aiResult = await legalAnalysisModel.generateContent(fullPrompt);
+    
+    // Check if response is valid
+    if (!aiResult.success || !aiResult.text) {
+      throw new Error('Invalid response from AI model');
+    }
+    
+    const analysisText = aiResult.text;
+    const modelUsed = aiResult.modelUsed;
+
+    // Parse AI response
+    let parsedAnalysis;
+    try {
+      // First try to parse the entire response as JSON
+      try {
+        parsedAnalysis = JSON.parse(analysisText);
+      } catch {
+        // If that fails, try to extract JSON from response
+        const jsonStart = analysisText.indexOf('{');
+        const jsonEnd = analysisText.lastIndexOf('}') + 1;
+        
+        if (jsonStart === -1 || jsonEnd <= jsonStart) {
+          throw new Error('No JSON found in AI response');
+        }
+        
+        const jsonString = analysisText.substring(jsonStart, jsonEnd);
+        parsedAnalysis = JSON.parse(jsonString);
+      }
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('Raw AI response:', analysisText);
+      
+      // Return a default analysis if parsing fails
+      parsedAnalysis = {
+        riskScore: 5,
+        confidence: 0.7,
+        findings: [{
+          category: "Analysis Processing",
+          severity: "Medium",
+          description: "The AI analysis encountered parsing issues. Please review the case manually or try again.",
+          evidence: ["AI response parsing failed"],
+          precedents: []
+        }],
+        recommendations: [{
+          type: "Legal Review",
+          priority: "High",
+          description: "Manual review recommended due to analysis processing issues.",
+          actionItems: ["Review case details manually", "Consult with legal experts"],
+          timeline: "Immediate"
+        }],
+        summary: "Analysis completed with technical limitations"
+      };
+    }
+
+    // Create analysis result
+    const analysisResult: AnalysisResult = {
+      id: generateId(),
+      caseId,
+      analysisType,
+      riskScore: parsedAnalysis.riskScore || 0,
+      confidence: parsedAnalysis.confidence || 0,
+      findings: parsedAnalysis.findings || [],
+      recommendations: parsedAnalysis.recommendations || [],
+      aiModel: modelUsed || 'gemini-dynamic',
+      analysisDate: new Date(),
+    };
+
+    const processingTime = Date.now() - startTime;
+
+    // TODO: Save to database here
+    // await saveAnalysisResult(analysisResult);
+
+    const response_data: AnalysisResponse = {
+      success: true,
+      data: analysisResult,
+      processingTime
+    };
+
+    return NextResponse.json(response_data);
+
+  } catch (error) {
+    console.error('Analysis error:', error);
+    
+    // Handle specific Gemini API errors
+    let errorMessage = 'Internal server error during analysis';
+    if (error instanceof Error) {
+      if (error.message.includes('version v1beta') || error.message.includes('not supported')) {
+        errorMessage = 'AI model configuration error. Please check API settings.';
+      } else if (error.message.includes('API key')) {
+        errorMessage = 'API authentication error. Please check your API key.';
+      } else if (error.message.includes('quota') || error.message.includes('limit')) {
+        errorMessage = 'API rate limit exceeded. Please try again later.';
+      } else {
+        errorMessage = `AI Analysis Error: ${error.message}`;
+      }
+    }
+    
+    return NextResponse.json({
+      success: false,
+      error: errorMessage
+    }, { status: 500 });
+  }
+}
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
