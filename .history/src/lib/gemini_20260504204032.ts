@@ -36,7 +36,7 @@ export async function generateLegalAnalysis(prompt: string) {
   for (const modelName of modelNames) {
     try {
       console.log(`Trying model: ${modelName}`);
-      const model = getGenAI().getGenerativeModel({
+      const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
           temperature: 0.3,
@@ -66,35 +66,9 @@ export async function generateLegalAnalysis(prompt: string) {
   // Fallback: Generate mock analysis for testing
   console.log('All models failed. Generating mock analysis for testing...');
   
-  // Generate dynamic risk score based on analysis type and random factors
-  const generateDynamicRiskScore = (prompt: string) => {
-    let baseRisk = 5; // Default medium risk
-    
-    // Adjust based on analysis type
-    if (prompt.includes('conviction') || prompt.includes('wrongful')) baseRisk += 1.5;
-    if (prompt.includes('corruption') || prompt.includes('fraud')) baseRisk += 1;
-    if (prompt.includes('constitutional') || prompt.includes('rights')) baseRisk += 0.5;
-    if (prompt.includes('contract') || prompt.includes('property')) baseRisk -= 0.5;
-    
-    // Add some randomness (±1.5 points)
-    const randomFactor = (Math.random() - 0.5) * 3;
-    let finalRisk = baseRisk + randomFactor;
-    
-    // Keep within bounds 1-10
-    finalRisk = Math.max(1, Math.min(10, finalRisk));
-    
-    // Round to 1 decimal place
-    return Math.round(finalRisk * 10) / 10;
-  };
-
-  const generateDynamicConfidence = () => {
-    // Generate confidence between 70-95%
-    return Math.round((0.7 + Math.random() * 0.25) * 100) / 100;
-  };
-  
   const mockAnalysis = {
-    "riskScore": generateDynamicRiskScore(prompt),
-    "confidence": generateDynamicConfidence(),
+    "riskScore": 7.5,
+    "confidence": 0.85,
     "findings": [
       {
         "category": "Procedural Violations",
@@ -212,4 +186,4 @@ export const LEGAL_PROMPTS = {
   `
 };
 
-export { getGenAI };
+export { genAI };

@@ -212,4 +212,4 @@ export const LEGAL_PROMPTS = {
   `
 };
 
-export { getGenAI };
+export { genAI };

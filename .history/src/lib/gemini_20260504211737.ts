@@ -36,7 +36,7 @@ export async function generateLegalAnalysis(prompt: string) {
   for (const modelName of modelNames) {
     try {
       console.log(`Trying model: ${modelName}`);
-      const model = getGenAI().getGenerativeModel({
+      const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
           temperature: 0.3,
@@ -212,4 +212,4 @@ export const LEGAL_PROMPTS = {
   `
 };
 
-export { getGenAI };
+export { genAI };
