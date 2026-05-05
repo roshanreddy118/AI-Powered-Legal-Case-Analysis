@@ -45,20 +45,20 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
     }
 
-    // Prepare case context for AI analysis (optimized for speed)
+    // Prepare case context for AI analysis (simplified for serverless)
     const caseContext = `
       Case: ${caseData.caseNumber} - ${caseData.court}
       Type: ${caseData.caseType} (${caseData.status})
       
-      Summary: ${caseData.caseDetails?.summary?.substring(0, 250) || 'No summary'}
+      Summary: ${caseData.caseDetails?.summary?.substring(0, 500) || 'No summary'}
       
       Evidence: ${caseData.caseDetails?.evidence?.slice(0, 3).map((e: any) => 
-        `${e.description?.substring(0, 60)}`).join('; ') || 'No evidence'}
+        `${e.description?.substring(0, 100)}`).join('; ') || 'No evidence'}
       
       Witnesses: ${caseData.caseDetails?.witnesses?.slice(0, 2).map((w: any) => 
-        w.name?.substring(0, 30)).join('; ') || 'No witnesses'}
+        w.name?.substring(0, 50)).join('; ') || 'No witnesses'}
       
-      ${additionalContext ? `Notes: ${additionalContext.substring(0, 100)}` : ''}
+      ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
     `;
 
     const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nRESPOND WITH VALID JSON ONLY - NO OTHER TEXT:
