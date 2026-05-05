@@ -61,31 +61,33 @@ export async function POST(request: NextRequest) {
       ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
     `;
 
-    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nRESPOND WITH VALID JSON ONLY - NO OTHER TEXT:
+    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nIMPORTANT: Respond with ONLY valid JSON, no additional text or markdown. Use this exact format:
 
 {
-  "riskScore": 7,
-  "confidence": 0.8,
+  "riskScore": number (1-10),
+  "confidence": number (0-1),
   "findings": [
     {
-      "category": "Evidence Reliability",
-      "severity": "High",
-      "description": "Brief issue description",
-      "evidence": ["evidence 1", "evidence 2"],
-      "precedents": ["legal precedent"]
+      "category": "string",
+      "severity": "Low|Medium|High|Critical",
+      "description": "string (max 150 chars)",
+      "evidence": ["max 2 items"],
+      "precedents": ["max 1 item"]
     }
   ],
   "recommendations": [
     {
-      "type": "Legal Review",
-      "priority": "High",
-      "description": "Brief recommendation",
-      "actionItems": ["action 1", "action 2"],
-      "timeline": "timeframe"
+      "type": "Legal Review|Investigation Required|Policy Change",
+      "priority": "Low|Medium|High|Urgent", 
+      "description": "string (max 150 chars)",
+      "actionItems": ["max 2 items"],
+      "timeline": "string"
     }
   ],
-  "summary": "Brief case analysis summary"
-}`;
+  "summary": "Brief summary (max 200 chars)"
+}
+
+Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON only.`;
 
     // Get AI analysis using dynamic model selection with timeout
     let aiResult;
@@ -264,6 +266,21 @@ export async function POST(request: NextRequest) {
           }
         ],
         summary: "Case shows evidence reliability concerns and witness credibility issues requiring detailed legal review."
+      };
+    }
+          severity: Severity.MEDIUM,
+          description: "AI analysis completed but response parsing failed. The case may have complex elements requiring manual review.",
+          evidence: ["JSON parsing failed", "AI model responded but format was invalid"],
+          precedents: ["Manual legal analysis recommended for complex cases"]
+        }],
+        recommendations: [{
+          type: RecommendationType.LEGAL_REVIEW,
+          priority: Priority.HIGH,
+          description: "Manual review recommended due to analysis processing issues.",
+          actionItems: ["Review case details manually", "Consult with legal experts", "Try with simplified case data"],
+          timeline: "Immediate"
+        }],
+        summary: "Analysis completed with parsing issues - manual review recommended"
       };
     }
 
