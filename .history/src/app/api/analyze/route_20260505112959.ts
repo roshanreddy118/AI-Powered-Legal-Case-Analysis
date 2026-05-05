@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { legalAnalysisModel, listAvailableModels, LEGAL_PROMPTS } from '@/lib/gemini';
-import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation, Severity, Priority, RecommendationType } from '@/types/legal';
+import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation, Severity } from '@/types/legal';
 
 export const maxDuration = 60; // Vercel serverless function timeout
 export const dynamic = 'force-dynamic'; // Ensure this is treated as a dynamic route
@@ -61,33 +61,32 @@ export async function POST(request: NextRequest) {
       ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
     `;
 
-    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nIMPORTANT: Respond with ONLY valid JSON, no additional text or markdown. Use this exact format:
-
-{
-  "riskScore": number (1-10),
-  "confidence": number (0-1),
-  "findings": [
+    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nProvide concise JSON analysis (max 3 findings, 2 recommendations):
     {
-      "category": "string",
-      "severity": "Low|Medium|High|Critical",
-      "description": "string (max 150 chars)",
-      "evidence": ["max 2 items"],
-      "precedents": ["max 1 item"]
+      "riskScore": number (1-10),
+      "confidence": number (0-1),
+      "findings": [
+        {
+          "category": "string",
+          "severity": "Low|Medium|High|Critical",
+          "description": "string (max 150 chars)",
+          "evidence": ["max 2 items"],
+          "precedents": ["max 1 item"]
+        }
+      ],
+      "recommendations": [
+        {
+          "type": "Legal Review|Investigation Required|Policy Change",
+          "priority": "Low|Medium|High|Urgent",
+          "description": "string (max 150 chars)",
+          "actionItems": ["max 2 items"],
+          "timeline": "string"
+        }
+      ],
+      "summary": "Brief summary (max 200 chars)"
     }
-  ],
-  "recommendations": [
-    {
-      "type": "Legal Review|Investigation Required|Policy Change",
-      "priority": "Low|Medium|High|Urgent", 
-      "description": "string (max 150 chars)",
-      "actionItems": ["max 2 items"],
-      "timeline": "string"
-    }
-  ],
-  "summary": "Brief summary (max 200 chars)"
-}
 
-Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON only.`;
+    Focus on most critical issues only. Be concise.`;
 
     // Get AI analysis using dynamic model selection with timeout
     let aiResult;
@@ -113,14 +112,14 @@ Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON on
         findings: [
           {
             category: "Analysis Timeout",
-            severity: Severity.MEDIUM,
+            severity: "Medium",
             description: "Analysis timed out due to complex case data. Manual review recommended.",
             evidence: ["Complex case with multiple evidence pieces", "Multiple witnesses and procedures"],
             precedents: ["Manual legal review required for complex cases"]
           },
           {
             category: "Procedural Concerns",
-            severity: Severity.HIGH, 
+            severity: "High", 
             description: "Based on case summary, potential procedural violations detected.",
             evidence: ["No warrant mentioned", "Limited legal representation initially"],
             precedents: ["D.K. Basu guidelines", "Article 21 protections"]
@@ -128,8 +127,8 @@ Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON on
         ],
         recommendations: [
           {
-            type: RecommendationType.LEGAL_REVIEW,
-            priority: Priority.HIGH,
+            type: "Legal Review",
+            priority: "High",
             description: "Immediate manual legal review required due to analysis timeout.",
             actionItems: ["Review case details manually", "Consult legal experts", "Re-analyze with simplified data"],
             timeline: "Within 24 hours"
@@ -170,97 +169,44 @@ Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON on
     // Parse AI response
     let parsedAnalysis;
     try {
-      console.log('Raw AI response:', analysisText.substring(0, 500) + '...');
-      
-      // Clean the response - remove markdown code blocks if present
-      let cleanedText = analysisText.trim();
-      
-      // Remove markdown code blocks
-      cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-      
-      // Try multiple JSON extraction methods
+      // First try to parse the entire response as JSON
       try {
-        // Method 1: Direct JSON parse
-        parsedAnalysis = JSON.parse(cleanedText);
+        parsedAnalysis = JSON.parse(analysisText);
       } catch {
-        // Method 2: Find JSON object bounds more carefully
-        const jsonStart = cleanedText.search(/\{/);
-        let jsonEnd = -1;
+        // If that fails, try to extract JSON from response
+        const jsonStart = analysisText.indexOf('{');
+        const jsonEnd = analysisText.lastIndexOf('}') + 1;
         
-        if (jsonStart !== -1) {
-          let braceCount = 0;
-          let inString = false;
-          let escapeNext = false;
-          
-          for (let i = jsonStart; i < cleanedText.length; i++) {
-            const char = cleanedText[i];
-            
-            if (escapeNext) {
-              escapeNext = false;
-              continue;
-            }
-            
-            if (char === '\\') {
-              escapeNext = true;
-              continue;
-            }
-            
-            if (char === '"' && !escapeNext) {
-              inString = !inString;
-              continue;
-            }
-            
-            if (!inString) {
-              if (char === '{') {
-                braceCount++;
-              } else if (char === '}') {
-                braceCount--;
-                if (braceCount === 0) {
-                  jsonEnd = i + 1;
-                  break;
-                }
-              }
-            }
-          }
+        if (jsonStart === -1 || jsonEnd <= jsonStart) {
+          throw new Error('No JSON found in AI response');
         }
         
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          const jsonString = cleanedText.substring(jsonStart, jsonEnd);
-          console.log('Extracted JSON:', jsonString.substring(0, 200) + '...');
-          parsedAnalysis = JSON.parse(jsonString);
-        } else {
-          throw new Error('Could not find valid JSON bounds');
-        }
+        const jsonString = analysisText.substring(jsonStart, jsonEnd);
+        parsedAnalysis = JSON.parse(jsonString);
       }
-      
-      // Validate required fields
-      if (!parsedAnalysis.riskScore || !parsedAnalysis.findings || !Array.isArray(parsedAnalysis.findings)) {
-        throw new Error('Invalid JSON structure - missing required fields');
-      }
-      
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError);
-      console.error('Full AI response:', analysisText);
+      console.error('Raw AI response:', analysisText);
       
-      // Return a more detailed default analysis if parsing fails
+      // Return a default analysis if parsing fails
       parsedAnalysis = {
-        riskScore: 6,
-        confidence: 0.6,
+        riskScore: 5,
+        confidence: 0.7,
         findings: [{
           category: "Analysis Processing",
-          severity: Severity.MEDIUM,
-          description: "AI analysis completed but response parsing failed. The case may have complex elements requiring manual review.",
-          evidence: ["JSON parsing failed", "AI model responded but format was invalid"],
-          precedents: ["Manual legal analysis recommended for complex cases"]
+          severity: "Medium",
+          description: "The AI analysis encountered parsing issues. Please review the case manually or try again.",
+          evidence: ["AI response parsing failed"],
+          precedents: []
         }],
         recommendations: [{
-          type: RecommendationType.LEGAL_REVIEW,
-          priority: Priority.HIGH,
+          type: "Legal Review",
+          priority: "High",
           description: "Manual review recommended due to analysis processing issues.",
-          actionItems: ["Review case details manually", "Consult with legal experts", "Try with simplified case data"],
+          actionItems: ["Review case details manually", "Consult with legal experts"],
           timeline: "Immediate"
         }],
-        summary: "Analysis completed with parsing issues - manual review recommended"
+        summary: "Analysis completed with technical limitations"
       };
     }
 

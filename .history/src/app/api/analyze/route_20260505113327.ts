@@ -61,33 +61,32 @@ export async function POST(request: NextRequest) {
       ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
     `;
 
-    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nIMPORTANT: Respond with ONLY valid JSON, no additional text or markdown. Use this exact format:
-
-{
-  "riskScore": number (1-10),
-  "confidence": number (0-1),
-  "findings": [
+    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nProvide concise JSON analysis (max 3 findings, 2 recommendations):
     {
-      "category": "string",
-      "severity": "Low|Medium|High|Critical",
-      "description": "string (max 150 chars)",
-      "evidence": ["max 2 items"],
-      "precedents": ["max 1 item"]
+      "riskScore": number (1-10),
+      "confidence": number (0-1),
+      "findings": [
+        {
+          "category": "string",
+          "severity": "Low|Medium|High|Critical",
+          "description": "string (max 150 chars)",
+          "evidence": ["max 2 items"],
+          "precedents": ["max 1 item"]
+        }
+      ],
+      "recommendations": [
+        {
+          "type": "Legal Review|Investigation Required|Policy Change",
+          "priority": "Low|Medium|High|Urgent",
+          "description": "string (max 150 chars)",
+          "actionItems": ["max 2 items"],
+          "timeline": "string"
+        }
+      ],
+      "summary": "Brief summary (max 200 chars)"
     }
-  ],
-  "recommendations": [
-    {
-      "type": "Legal Review|Investigation Required|Policy Change",
-      "priority": "Low|Medium|High|Urgent", 
-      "description": "string (max 150 chars)",
-      "actionItems": ["max 2 items"],
-      "timeline": "string"
-    }
-  ],
-  "summary": "Brief summary (max 200 chars)"
-}
 
-Provide exactly 2-3 findings and 1-2 recommendations. Respond with valid JSON only.`;
+    Focus on most critical issues only. Be concise.`;
 
     // Get AI analysis using dynamic model selection with timeout
     let aiResult;
