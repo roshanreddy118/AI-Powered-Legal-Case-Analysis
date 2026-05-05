@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { legalAnalysisModel, listAvailableModels, LEGAL_PROMPTS } from '@/lib/gemini';
 import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation } from '@/types/legal';
 
-export const maxDuration = 60; // Vercel serverless function timeout
-export const dynamic = 'force-dynamic'; // Ensure this is treated as a dynamic route
-
 export async function POST(request: NextRequest) {
   try {
     const { caseId, analysisType, additionalContext, caseData } = await request.json() as AnalysisRequest & { caseData: any };
@@ -45,48 +42,61 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
     }
 
-    // Prepare case context for AI analysis (simplified for serverless)
+    // Prepare case context for AI analysis
     const caseContext = `
-      Case: ${caseData.caseNumber} - ${caseData.court}
-      Type: ${caseData.caseType} (${caseData.status})
+      Case Details:
+      Case Number: ${caseData.caseNumber}
+      Court: ${caseData.court}
+      Case Type: ${caseData.caseType}
+      Status: ${caseData.status}
       
-      Summary: ${caseData.caseDetails?.summary?.substring(0, 500) || 'No summary'}
+      Parties Involved:
+      ${caseData.parties?.map((p: any) => `${p.type}: ${p.name}`).join('\n')}
       
-      Evidence: ${caseData.caseDetails?.evidence?.slice(0, 3).map((e: any) => 
-        `${e.description?.substring(0, 100)}`).join('; ') || 'No evidence'}
+      Legal Sections:
+      ${caseData.caseDetails?.sections?.map((s: any) => `${s.act} Section ${s.section}: ${s.description}`).join('\n')}
       
-      Witnesses: ${caseData.caseDetails?.witnesses?.slice(0, 2).map((w: any) => 
-        w.name?.substring(0, 50)).join('; ') || 'No witnesses'}
+      Evidence:
+      ${caseData.caseDetails?.evidence?.map((e: any) => `${e.type}: ${e.description} (Reliability: ${e.reliability}/5)`).join('\n')}
       
-      ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
+      Witnesses:
+      ${caseData.caseDetails?.witnesses?.map((w: any) => `${w.type}: ${w.name} (Credibility: ${w.credibility}/5)`).join('\n')}
+      
+      Case Summary:
+      ${caseData.caseDetails?.summary}
+      
+      Timeline:
+      ${caseData.timeline?.map((t: any) => `${t.date}: ${t.description}`).join('\n')}
+      
+      ${additionalContext ? `Additional Context: ${additionalContext}` : ''}
     `;
 
-    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nProvide concise JSON analysis (max 3 findings, 2 recommendations):
+    const fullPrompt = `${prompt}\n\nCase Information:\n${caseContext}\n\nPlease provide a concise analysis in the following JSON format (keep responses focused and brief):
     {
       "riskScore": number (1-10),
       "confidence": number (0-1),
       "findings": [
         {
           "category": "string",
-          "severity": "Low|Medium|High|Critical",
-          "description": "string (max 150 chars)",
-          "evidence": ["max 2 items"],
-          "precedents": ["max 1 item"]
+          "severity": "Low" | "Medium" | "High" | "Critical",
+          "description": "string (max 200 chars)",
+          "evidence": ["string array (max 3 items)"],
+          "precedents": ["string array (max 2 items)"]
         }
       ],
       "recommendations": [
         {
-          "type": "Legal Review|Investigation Required|Policy Change",
-          "priority": "Low|Medium|High|Urgent",
-          "description": "string (max 150 chars)",
-          "actionItems": ["max 2 items"],
-          "timeline": "string"
+          "type": "Investigation Required" | "Legal Review" | "Policy Change" | "Training Required" | "Escalate to Higher Authority" | "No Action Required",
+          "priority": "Low" | "Medium" | "High" | "Urgent",
+          "description": "string (max 200 chars)",
+          "actionItems": ["string array (max 3 items)"],
+          "timeline": "string (optional)"
         }
       ],
-      "summary": "Brief summary (max 200 chars)"
+      "summary": "Brief overall analysis summary (max 300 chars)"
     }
 
-    Focus on most critical issues only. Be concise.`;
+    Focus on the most critical 3-4 findings and 2-3 recommendations. Be concise but accurate.`;
 
     // Get AI analysis using dynamic model selection with timeout
     let aiResult;

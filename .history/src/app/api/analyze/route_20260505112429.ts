@@ -45,20 +45,33 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
     }
 
-    // Prepare case context for AI analysis (simplified for serverless)
+    // Prepare case context for AI analysis
     const caseContext = `
-      Case: ${caseData.caseNumber} - ${caseData.court}
-      Type: ${caseData.caseType} (${caseData.status})
+      Case Details:
+      Case Number: ${caseData.caseNumber}
+      Court: ${caseData.court}
+      Case Type: ${caseData.caseType}
+      Status: ${caseData.status}
       
-      Summary: ${caseData.caseDetails?.summary?.substring(0, 500) || 'No summary'}
+      Parties Involved:
+      ${caseData.parties?.map((p: any) => `${p.type}: ${p.name}`).join('\n')}
       
-      Evidence: ${caseData.caseDetails?.evidence?.slice(0, 3).map((e: any) => 
-        `${e.description?.substring(0, 100)}`).join('; ') || 'No evidence'}
+      Legal Sections:
+      ${caseData.caseDetails?.sections?.map((s: any) => `${s.act} Section ${s.section}: ${s.description}`).join('\n')}
       
-      Witnesses: ${caseData.caseDetails?.witnesses?.slice(0, 2).map((w: any) => 
-        w.name?.substring(0, 50)).join('; ') || 'No witnesses'}
+      Evidence:
+      ${caseData.caseDetails?.evidence?.map((e: any) => `${e.type}: ${e.description} (Reliability: ${e.reliability}/5)`).join('\n')}
       
-      ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
+      Witnesses:
+      ${caseData.caseDetails?.witnesses?.map((w: any) => `${w.type}: ${w.name} (Credibility: ${w.credibility}/5)`).join('\n')}
+      
+      Case Summary:
+      ${caseData.caseDetails?.summary}
+      
+      Timeline:
+      ${caseData.timeline?.map((t: any) => `${t.date}: ${t.description}`).join('\n')}
+      
+      ${additionalContext ? `Additional Context: ${additionalContext}` : ''}
     `;
 
     const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nProvide concise JSON analysis (max 3 findings, 2 recommendations):

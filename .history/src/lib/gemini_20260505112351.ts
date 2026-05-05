@@ -29,8 +29,9 @@ export async function listAvailableModels() {
 export async function generateLegalAnalysis(prompt: string) {
   const modelNames = [
     'models/gemini-2.5-flash', // Fastest model first
+    'models/gemini-flash-latest',
     'models/gemini-2.0-flash', // Even faster fallback
-    'models/gemini-flash-latest'
+    'models/gemini-2.5-pro'
   ];
 
   for (const modelName of modelNames) {
@@ -39,10 +40,10 @@ export async function generateLegalAnalysis(prompt: string) {
       const model = getGenAI().getGenerativeModel({
         model: modelName,
         generationConfig: {
-          temperature: 0.2, // Lower for faster, more focused responses
-          topK: 20,         // Reduced for speed
-          topP: 0.8,        // Reduced for speed
-          maxOutputTokens: 2048, // Further reduced for serverless
+          temperature: 0.3,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 4096, // Reduced for faster response
         },
       });
 

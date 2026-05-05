@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { legalAnalysisModel, listAvailableModels, LEGAL_PROMPTS } from '@/lib/gemini';
 import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation } from '@/types/legal';
 
-export const maxDuration = 60; // Vercel serverless function timeout
-export const dynamic = 'force-dynamic'; // Ensure this is treated as a dynamic route
-
 export async function POST(request: NextRequest) {
   try {
     const { caseId, analysisType, additionalContext, caseData } = await request.json() as AnalysisRequest & { caseData: any };
@@ -45,118 +42,64 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
     }
 
-    // Prepare case context for AI analysis (simplified for serverless)
+    // Prepare case context for AI analysis
     const caseContext = `
-      Case: ${caseData.caseNumber} - ${caseData.court}
-      Type: ${caseData.caseType} (${caseData.status})
+      Case Details:
+      Case Number: ${caseData.caseNumber}
+      Court: ${caseData.court}
+      Case Type: ${caseData.caseType}
+      Status: ${caseData.status}
       
-      Summary: ${caseData.caseDetails?.summary?.substring(0, 500) || 'No summary'}
+      Parties Involved:
+      ${caseData.parties?.map((p: any) => `${p.type}: ${p.name}`).join('\n')}
       
-      Evidence: ${caseData.caseDetails?.evidence?.slice(0, 3).map((e: any) => 
-        `${e.description?.substring(0, 100)}`).join('; ') || 'No evidence'}
+      Legal Sections:
+      ${caseData.caseDetails?.sections?.map((s: any) => `${s.act} Section ${s.section}: ${s.description}`).join('\n')}
       
-      Witnesses: ${caseData.caseDetails?.witnesses?.slice(0, 2).map((w: any) => 
-        w.name?.substring(0, 50)).join('; ') || 'No witnesses'}
+      Evidence:
+      ${caseData.caseDetails?.evidence?.map((e: any) => `${e.type}: ${e.description} (Reliability: ${e.reliability}/5)`).join('\n')}
       
-      ${additionalContext ? `Context: ${additionalContext.substring(0, 200)}` : ''}
+      Witnesses:
+      ${caseData.caseDetails?.witnesses?.map((w: any) => `${w.type}: ${w.name} (Credibility: ${w.credibility}/5)`).join('\n')}
+      
+      Case Summary:
+      ${caseData.caseDetails?.summary}
+      
+      Timeline:
+      ${caseData.timeline?.map((t: any) => `${t.date}: ${t.description}`).join('\n')}
+      
+      ${additionalContext ? `Additional Context: ${additionalContext}` : ''}
     `;
 
-    const fullPrompt = `${prompt}\n\nCase: ${caseContext}\n\nProvide concise JSON analysis (max 3 findings, 2 recommendations):
+    const fullPrompt = `${prompt}\n\nCase Information:\n${caseContext}\n\nPlease provide a concise analysis in the following JSON format (keep responses focused and brief):
     {
       "riskScore": number (1-10),
       "confidence": number (0-1),
       "findings": [
         {
           "category": "string",
-          "severity": "Low|Medium|High|Critical",
-          "description": "string (max 150 chars)",
-          "evidence": ["max 2 items"],
-          "precedents": ["max 1 item"]
+          "severity": "Low" | "Medium" | "High" | "Critical",
+          "description": "string (max 200 chars)",
+          "evidence": ["string array (max 3 items)"],
+          "precedents": ["string array (max 2 items)"]
         }
       ],
       "recommendations": [
         {
-          "type": "Legal Review|Investigation Required|Policy Change",
-          "priority": "Low|Medium|High|Urgent",
-          "description": "string (max 150 chars)",
-          "actionItems": ["max 2 items"],
-          "timeline": "string"
+          "type": "Investigation Required" | "Legal Review" | "Policy Change" | "Training Required" | "Escalate to Higher Authority" | "No Action Required",
+          "priority": "Low" | "Medium" | "High" | "Urgent",
+          "description": "string (max 200 chars)",
+          "actionItems": ["string array (max 3 items)"],
+          "timeline": "string (optional)"
         }
       ],
-      "summary": "Brief summary (max 200 chars)"
+      "summary": "Brief overall analysis summary (max 300 chars)"
     }
 
-    Focus on most critical issues only. Be concise.`;
+    Focus on the most critical 3-4 findings and 2-3 recommendations. Be concise but accurate.`;
 
-    // Get AI analysis using dynamic model selection with timeout
-    let aiResult;
-    try {
-      // Set a timeout for the entire AI analysis (shorter for serverless)
-      const timeoutDuration = process.env.NODE_ENV === 'production' ? 30000 : 50000;
-      const analysisTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Analysis timeout after ${timeoutDuration/1000}s - try with shorter input`)), timeoutDuration);
-      });
-
-      aiResult = await Promise.race([
-        legalAnalysisModel.generateContent(fullPrompt),
-        analysisTimeout
-      ]) as any;
-      
-    } catch (timeoutError) {
-      console.error('AI analysis timeout:', timeoutError);
-      
-      // Return a basic analysis when timeout occurs
-      const basicAnalysis = {
-        riskScore: 6,
-        confidence: 0.7,
-        findings: [
-          {
-            category: "Analysis Timeout",
-            severity: "Medium",
-            description: "Analysis timed out due to complex case data. Manual review recommended.",
-            evidence: ["Complex case with multiple evidence pieces", "Multiple witnesses and procedures"],
-            precedents: ["Manual legal review required for complex cases"]
-          },
-          {
-            category: "Procedural Concerns",
-            severity: "High", 
-            description: "Based on case summary, potential procedural violations detected.",
-            evidence: ["No warrant mentioned", "Limited legal representation initially"],
-            precedents: ["D.K. Basu guidelines", "Article 21 protections"]
-          }
-        ],
-        recommendations: [
-          {
-            type: "Legal Review",
-            priority: "High",
-            description: "Immediate manual legal review required due to analysis timeout.",
-            actionItems: ["Review case details manually", "Consult legal experts", "Re-analyze with simplified data"],
-            timeline: "Within 24 hours"
-          }
-        ],
-        summary: "Complex case requiring manual review due to analysis timeout. Multiple procedural concerns detected."
-      };
-
-      const analysisResult: AnalysisResult = {
-        id: generateId(),
-        caseId,
-        analysisType,
-        riskScore: basicAnalysis.riskScore,
-        confidence: basicAnalysis.confidence,
-        findings: basicAnalysis.findings,
-        recommendations: basicAnalysis.recommendations,
-        aiModel: 'timeout-fallback',
-        analysisDate: new Date(),
-      };
-
-      const processingTime = Date.now() - startTime;
-      return NextResponse.json({
-        success: true,
-        data: analysisResult,
-        processingTime,
-        note: "Analysis timed out - basic analysis provided. Try with less detailed input for full AI analysis."
-      });
-    }
+    // Get AI analysis using dynamic model selection
+    const aiResult = await legalAnalysisModel.generateContent(fullPrompt);
     
     // Check if response is valid
     if (!aiResult.success || !aiResult.text) {
