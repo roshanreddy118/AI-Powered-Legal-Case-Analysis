@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { legalAnalysisModel, listAvailableModels, LEGAL_PROMPTS } from '@/lib/gemini';
-import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation } from '@/types/legal';
+import { AnalysisType, AnalysisRequest, AnalysisResponse, AnalysisResult, Finding, Recommendation, Severity, Priority, RecommendationType } from '@/types/legal';
 
 export const maxDuration = 60; // Vercel serverless function timeout
 export const dynamic = 'force-dynamic'; // Ensure this is treated as a dynamic route
@@ -112,14 +112,14 @@ export async function POST(request: NextRequest) {
         findings: [
           {
             category: "Analysis Timeout",
-            severity: "Medium",
+            severity: Severity.MEDIUM,
             description: "Analysis timed out due to complex case data. Manual review recommended.",
             evidence: ["Complex case with multiple evidence pieces", "Multiple witnesses and procedures"],
             precedents: ["Manual legal review required for complex cases"]
           },
           {
             category: "Procedural Concerns",
-            severity: "High", 
+            severity: Severity.HIGH, 
             description: "Based on case summary, potential procedural violations detected.",
             evidence: ["No warrant mentioned", "Limited legal representation initially"],
             precedents: ["D.K. Basu guidelines", "Article 21 protections"]
@@ -127,8 +127,8 @@ export async function POST(request: NextRequest) {
         ],
         recommendations: [
           {
-            type: "Legal Review",
-            priority: "High",
+            type: RecommendationType.LEGAL_REVIEW,
+            priority: Priority.HIGH,
             description: "Immediate manual legal review required due to analysis timeout.",
             actionItems: ["Review case details manually", "Consult legal experts", "Re-analyze with simplified data"],
             timeline: "Within 24 hours"
