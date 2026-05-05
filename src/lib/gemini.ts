@@ -28,9 +28,10 @@ export async function listAvailableModels() {
 // Function to try generating content with different models
 export async function generateLegalAnalysis(prompt: string) {
   const modelNames = [
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-pro'
+    'models/gemini-2.5-flash',
+    'models/gemini-flash-latest',
+    'models/gemini-2.5-pro',
+    'models/gemini-pro-latest'
   ];
 
   for (const modelName of modelNames) {

@@ -17,23 +17,28 @@ export async function POST(request: NextRequest) {
 
     // Select appropriate prompt based on analysis type
     let prompt = '';
-    switch (analysisType) {
-      case AnalysisType.WRONGFUL_CONVICTION:
+    // Handle both enum keys and string values
+    const normalizedAnalysisType = Object.keys(AnalysisType).find(key => 
+      AnalysisType[key as keyof typeof AnalysisType] === analysisType || key === analysisType
+    );
+    
+    switch (normalizedAnalysisType) {
+      case 'WRONGFUL_CONVICTION':
         prompt = LEGAL_PROMPTS.WRONGFUL_CONVICTION_ANALYSIS;
         break;
-      case AnalysisType.PROSECUTORIAL_MISCONDUCT:
+      case 'PROSECUTORIAL_MISCONDUCT':
         prompt = LEGAL_PROMPTS.PROSECUTORIAL_MISCONDUCT;
         break;
-      case AnalysisType.CASE_SIMILARITY:
+      case 'CASE_SIMILARITY':
         prompt = LEGAL_PROMPTS.CASE_SIMILARITY_ANALYSIS;
         break;
-      case AnalysisType.BIAS_DETECTION:
+      case 'BIAS_DETECTION':
         prompt = LEGAL_PROMPTS.BIAS_DETECTION;
         break;
       default:
         return NextResponse.json({
           success: false,
-          error: 'Invalid analysis type'
+          error: `Invalid analysis type: ${analysisType}. Valid types: ${Object.values(AnalysisType).join(', ')}`
         }, { status: 400 });
     }
 

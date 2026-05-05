@@ -14,20 +14,46 @@ export async function GET() {
     
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     
-    // Try the most basic model with a simple prompt
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-pro',
-    });
+    // Try different models
+    const modelsToTry = [
+      'models/gemini-2.5-flash',
+      'models/gemini-flash-latest',
+      'models/gemini-2.5-pro',
+      'models/gemini-pro-latest'
+    ];
 
-    const result = await model.generateContent('Hello, respond with just "API Works"');
-    const response = await result.response;
+    let lastError = '';
     
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`Trying model: ${modelName}`);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+        });
+
+        const result = await model.generateContent('Hello, respond with just "API Works"');
+        const response = await result.response;
+        
+        return NextResponse.json({
+          success: true,
+          apiResponse: response.text(),
+          model: modelName,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.log(`Model ${modelName} failed:`, error);
+        lastError = error instanceof Error ? error.message : 'Unknown error';
+        continue;
+      }
+    }
+
+    // If we get here, all models failed
     return NextResponse.json({
-      success: true,
-      apiResponse: response.text(),
-      model: 'gemini-pro',
+      success: false,
+      error: `All models failed. Last error: ${lastError}`,
+      apiKeyLength: process.env.GEMINI_API_KEY?.length || 0,
       timestamp: new Date().toISOString()
-    });
+    }, { status: 500 });
 
   } catch (error) {
     console.error('Basic Gemini API test failed:', error);
